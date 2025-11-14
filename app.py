@@ -4,6 +4,8 @@ A conversational tool for faculty to provide structured feedback on medical stud
 """
 
 from datetime import datetime
+import os
+import re
 
 import streamlit as st
 
@@ -22,7 +24,6 @@ st.set_page_config(
 # Initialize configuration
 try:
     Config.validate()
-    logger.app_started()  # Log app startup
 except ValueError as e:
     logger.config_validation_failed(str(e))
     st.error(f"Configuration Error: {e}")
@@ -51,14 +52,18 @@ def start_conversation():
     """Initialize a new conversation"""
     try:
         st.session_state.client = VertexAIClient()
+
+        # If user provided a student name before starting, inject it so
+        # conversation logs include the student's name in the first events.
+        if st.session_state.get("student_name"):
+            st.session_state.client.set_student_name(st.session_state.student_name)
+
         initial_message = st.session_state.client.start_conversation()
-        
-        st.session_state.messages = [
-            {"role": "assistant", "content": initial_message}
-        ]
+
+        st.session_state.messages = [{"role": "assistant", "content": initial_message}]
         st.session_state.conversation_started = True
         st.session_state.feedback_generated = False
-        
+
     except Exception as e:
         logger.error(f"Failed to start conversation: {e}")
         st.error(f"Error starting conversation: {e}")
@@ -157,7 +162,30 @@ def save_and_finish():
             )
             if filename:
                 st.success(f"✅ Conversation saved: {filename}")
-            
+
+            # Also save the latest generated/refined feedback to ./output (only if present)
+            try:
+                feedback_text = st.session_state.current_feedback or ""
+                if feedback_text:
+                    output_dir = os.path.join(".", "output")
+                    os.makedirs(output_dir, exist_ok=True)
+
+                    student_for_fname = st.session_state.student_name or "unknown"
+                    # sanitize filename: allow alnum, dash, underscore
+                    safe_student = re.sub(r"[^A-Za-z0-9_-]", "_", student_for_fname.strip())
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
+                    feedback_path = os.path.join(output_dir, feedback_fname)
+
+                    with open(feedback_path, "w") as f:
+                        f.write(feedback_text)
+
+                    logger.info("Feedback saved", student=student_for_fname, file=feedback_path)
+                    st.success(f"✅ Feedback saved: {feedback_path}")
+            except Exception as e:
+                logger.error(f"Failed to save feedback to ./output: {e}", student=st.session_state.student_name)
+                st.error(f"Error saving feedback file: {e}")
+
             # Reset session - INCLUDING student name
             logger.info("Session reset", student=st.session_state.student_name)
             st.session_state.client = None
@@ -167,21 +195,27 @@ def save_and_finish():
             st.session_state.current_feedback = ""
             st.session_state.student_name = ""  # Clear student name
             st.session_state.student_name_set = False  # Reset flag
-            
+
         except Exception as e:
-            logger.error(f"Error saving conversation: {e}", student=st.session_state.student_name)
+            logger.error(
+                f"Error saving conversation: {e}", student=st.session_state.student_name
+            )
             st.error(f"Error saving conversation: {e}")
     else:
         logger.error("save_and_finish called without active client")
         st.error("No active conversation.")
 
 
-
-
 # Main UI
 def main():
     """Main application UI"""
     initialize_session_state()
+
+    # Log application start once per Streamlit session to avoid noisy repeats
+    # (Streamlit re-runs the script on every interaction).
+    if not st.session_state.get("app_started_logged"):
+        logger.app_started()
+        st.session_state.app_started_logged = True
 
     # Sidebar
     with st.sidebar:
@@ -227,16 +261,17 @@ def main():
             student_input = st.text_input(
                 "Student Name (optional - for logging)",
                 placeholder="e.g., Jane Doe",
-                key="student_name_input"
+                key="student_name_input",
             )
         with col2:
             if st.button("Set Name", type="secondary"):
                 st.session_state.student_name = student_input
                 update_student_name()
                 st.rerun()
-        
-        st.info("👆 You can set the student name now, or skip and continue the conversation")
 
+        st.info(
+            "👆 You can set the student name now, or skip and continue the conversation"
+        )
 
     # Main conversation area
     if not st.session_state.conversation_started:

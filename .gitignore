@@ -16,6 +16,10 @@ env/
 *.json
 !.gcloudignore
 
+# Output
+output/
+*.txt
+
 # Logs
 logs/
 *.log
