@@ -3,9 +3,9 @@ Preceptor Feedback Bot - Streamlit Application
 A conversational tool for faculty to provide structured feedback on medical students.
 """
 
-from datetime import datetime
 import os
 import re
+from datetime import datetime
 
 import streamlit as st
 
@@ -172,7 +172,9 @@ def save_and_finish():
 
                     student_for_fname = st.session_state.student_name or "unknown"
                     # sanitize filename: allow alnum, dash, underscore
-                    safe_student = re.sub(r"[^A-Za-z0-9_-]", "_", student_for_fname.strip())
+                    safe_student = re.sub(
+                        r"[^A-Za-z0-9_-]", "_", student_for_fname.strip()
+                    )
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
                     feedback_path = os.path.join(output_dir, feedback_fname)
@@ -180,10 +182,15 @@ def save_and_finish():
                     with open(feedback_path, "w") as f:
                         f.write(feedback_text)
 
-                    logger.info("Feedback saved", student=student_for_fname, file=feedback_path)
+                    logger.info(
+                        "Feedback saved", student=student_for_fname, file=feedback_path
+                    )
                     st.success(f"✅ Feedback saved: {feedback_path}")
             except Exception as e:
-                logger.error(f"Failed to save feedback to ./output: {e}", student=st.session_state.student_name)
+                logger.error(
+                    f"Failed to save feedback to ./output: {e}",
+                    student=st.session_state.student_name,
+                )
                 st.error(f"Error saving feedback file: {e}")
 
             # Reset session - INCLUDING student name
