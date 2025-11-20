@@ -10,8 +10,53 @@ from datetime import datetime
 import streamlit as st
 
 from config import Config
-from utils import logger  # Add this import
+from utils import logger
 from utils.vertex_ai_client import VertexAIClient
+
+
+# Authentication check (stubbed for future use)
+def check_authentication():
+    """
+    Check if user is authenticated.
+    Currently a stub - returns True to allow all users.
+
+    To enable authentication later:
+    1. Set REQUIRE_AUTH=true in environment variables
+    2. Deploy Cloud Run with --no-allow-unauthenticated
+    3. Implement one of these options:
+       - Identity-Aware Proxy (IAP) - reads headers
+       - Streamlit auth (if using Streamlit Cloud)
+       - Custom OAuth flow
+       - Simple password protection
+
+    Returns:
+        bool: True if user is authenticated, False otherwise
+    """
+    if not Config.REQUIRE_AUTH:
+        return True
+
+    # TODO: Implement actual authentication
+    # Example using IAP headers (when enabled):
+    # user_email = st.experimental_get_query_params().get("user_email")
+    # if user_email and user_email[0] in Config.ALLOWED_USERS:
+    #     return True
+
+    # For now, allow everyone
+    logger.debug("Authentication check bypassed (REQUIRE_AUTH=false)")
+    return True
+
+
+def show_authentication_error():
+    """Display authentication error page"""
+    st.error("🔒 Authentication Required")
+    st.write("You must be authenticated to access this application.")
+    st.write("Please contact the administrator for access.")
+    st.stop()
+
+
+# Check authentication before rendering app
+if not check_authentication():
+    show_authentication_error()
 
 # Page configuration
 st.set_page_config(
@@ -163,32 +208,54 @@ def save_and_finish():
             if filename:
                 st.success(f"✅ Conversation saved: {filename}")
 
-            # Also save the latest generated/refined feedback to ./output (only if present)
+            # Also save the latest generated/refined feedback
             try:
                 feedback_text = st.session_state.current_feedback or ""
                 if feedback_text:
-                    output_dir = os.path.join(".", "output")
-                    os.makedirs(output_dir, exist_ok=True)
-
                     student_for_fname = st.session_state.student_name or "unknown"
-                    # sanitize filename: allow alnum, dash, underscore
+                    # Sanitize filename: allow alnum, dash, underscore
                     safe_student = re.sub(
                         r"[^A-Za-z0-9_-]", "_", student_for_fname.strip()
                     )
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
-                    feedback_path = os.path.join(output_dir, feedback_fname)
-
-                    with open(feedback_path, "w") as f:
-                        f.write(feedback_text)
-
-                    logger.info(
-                        "Feedback saved", student=student_for_fname, file=feedback_path
-                    )
-                    st.success(f"✅ Feedback saved: {feedback_path}")
+                    
+                    if Config.IS_CLOUD:
+                        # Cloud: Save to Cloud Storage
+                        from google.cloud import storage
+                        client = storage.Client()
+                        bucket = client.bucket(Config.LOG_BUCKET)
+                        blob = bucket.blob(feedback_fname)
+                        blob.upload_from_string(
+                            feedback_text,
+                            content_type='text/plain'
+                        )
+                        feedback_path = f"gs://{Config.LOG_BUCKET}/{feedback_fname}"
+                        logger.info(
+                            "Feedback saved to Cloud Storage",
+                            student=student_for_fname,
+                            file=feedback_path
+                        )
+                        st.success(f"✅ Feedback saved: {feedback_path}")
+                    else:
+                        # Local: Save to ./output directory
+                        output_dir = os.path.join(".", "output")
+                        os.makedirs(output_dir, exist_ok=True)
+                        feedback_path = os.path.join(output_dir, feedback_fname)
+                        
+                        with open(feedback_path, "w") as f:
+                            f.write(feedback_text)
+                        
+                        logger.info(
+                            "Feedback saved to local file",
+                            student=student_for_fname,
+                            file=feedback_path
+                        )
+                        st.success(f"✅ Feedback saved: {feedback_path}")
+                        
             except Exception as e:
                 logger.error(
-                    f"Failed to save feedback to ./output: {e}",
+                    f"Failed to save feedback: {e}",
                     student=st.session_state.student_name,
                 )
                 st.error(f"Error saving feedback file: {e}")
@@ -211,7 +278,6 @@ def save_and_finish():
     else:
         logger.error("save_and_finish called without active client")
         st.error("No active conversation.")
-
 
 # Main UI
 def main():
@@ -256,6 +322,15 @@ def main():
         st.markdown("---")
         st.caption(f"Project: {Config.GCP_PROJECT_ID}")
         st.caption(f"Region: {Config.GCP_REGION}")
+        st.markdown("---")
+        with st.expander("ℹ️ Deployment Info"):
+            st.caption(f"Environment: {Config.DEPLOYMENT_ENV}")
+            st.caption(f"Project: {Config.GCP_PROJECT_ID}")
+            st.caption(f"Region: {Config.GCP_REGION}")
+            if Config.IS_CLOUD:
+                st.caption(f"Logs: gs://{Config.LOG_BUCKET}")
+            else:
+                st.caption(f"Logs: {Config.LOG_DIRECTORY}")
 
     # Main content area
     st.title("🩺 Preceptor Feedback Bot")

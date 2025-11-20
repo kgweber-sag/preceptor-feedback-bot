@@ -36,3 +36,10 @@ logs/
 
 # OS
 .DS_Store
+
+# Docker
+*.tar
+.dockerignore
+
+# Cloud Build
+cloudbuild.yaml.local

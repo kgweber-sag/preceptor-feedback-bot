@@ -22,32 +22,40 @@ class VertexAIClient:
     def __init__(self):
         """Initialize Vertex AI client with google-genai"""
         logger.debug("Initializing VertexAIClient")
-
-        # Set credentials if provided
-        if Config.GCP_CREDENTIALS_PATH and os.path.exists(Config.GCP_CREDENTIALS_PATH):
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = Config.GCP_CREDENTIALS_PATH
-            logger.debug(
-                f"Using service account credentials from {Config.GCP_CREDENTIALS_PATH}"
-            )
-
+        
+        # Set credentials based on environment
+        if Config.IS_CLOUD:
+            # Cloud Run: Use Application Default Credentials (automatic)
+            logger.debug("Using Application Default Credentials (Cloud Run service account)")
+        else:
+            # Local: Use service account JSON if provided
+            if Config.GCP_CREDENTIALS_PATH and os.path.exists(Config.GCP_CREDENTIALS_PATH):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = Config.GCP_CREDENTIALS_PATH
+                logger.debug(f"Using service account credentials from {Config.GCP_CREDENTIALS_PATH}")
+            else:
+                logger.warning("No credentials path specified, attempting Application Default Credentials")
+        
         try:
             # Initialize the genai client for Vertex AI
             self.client = genai.Client(
-                vertexai=True, project=Config.GCP_PROJECT_ID, location=Config.GCP_REGION
+                vertexai=True,
+                project=Config.GCP_PROJECT_ID,
+                location=Config.GCP_REGION
             )
             logger.info(
                 "Vertex AI client initialized",
                 project=Config.GCP_PROJECT_ID,
                 region=Config.GCP_REGION,
                 model=Config.MODEL_NAME,
+                environment=Config.DEPLOYMENT_ENV
             )
         except Exception as e:
             logger.error(f"Failed to initialize Vertex AI client: {e}")
             raise
-
+        
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
-
+        
         # Track conversation
         self.chat = None
         self.conversation_history: List[Dict] = []
@@ -270,20 +278,15 @@ Please format clearly with headers."""
         return marker_count >= 3
 
     def save_conversation_log(self, student_name: str = "unknown"):
-        """Save conversation to JSON file"""
+        """Save conversation to JSON file (local) or Cloud Storage (cloud)"""
         if not Config.LOG_TO_FILE:
             logger.debug("Conversation logging disabled, skipping save")
             return None
-
-        # Create logs directory if needed
-        os.makedirs(Config.LOG_DIRECTORY, exist_ok=True)
-
+        
         # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = (
-            f"{Config.LOG_DIRECTORY}/conversation_{student_name}_{timestamp}.json"
-        )
-
+        filename = f"conversation_{student_name}_{timestamp}.json"
+        
         # Prepare log data
         log_data = {
             "metadata": {
@@ -292,23 +295,38 @@ Please format clearly with headers."""
                 "student_name": student_name,
                 "total_turns": self.turn_count,
                 "project_id": Config.GCP_PROJECT_ID,
+                "environment": Config.DEPLOYMENT_ENV
             },
-            "conversation": self.conversation_history,
+            "conversation": self.conversation_history
         }
-
+        
         try:
-            # Save to file
-            with open(filename, "w") as f:
-                json.dump(log_data, f, indent=2)
-
+            if Config.IS_CLOUD:
+                # Write to Cloud Storage
+                from google.cloud import storage
+                client = storage.Client()
+                bucket = client.bucket(Config.LOG_BUCKET)
+                blob = bucket.blob(filename)
+                blob.upload_from_string(
+                    json.dumps(log_data, indent=2),
+                    content_type='application/json'
+                )
+                full_path = f"gs://{Config.LOG_BUCKET}/{filename}"
+            else:
+                # Write to local file
+                os.makedirs(Config.LOG_DIRECTORY, exist_ok=True)
+                full_path = f"{Config.LOG_DIRECTORY}/{filename}"
+                with open(full_path, 'w') as f:
+                    json.dump(log_data, f, indent=2)
+            
             logger.conversation_completed(
                 student_name=student_name,
                 turn_count=self.turn_count,
-                conversation_log_path=filename,
+                conversation_log_path=full_path
             )
-
-            return filename
-
+            
+            return full_path
+        
         except Exception as e:
             logger.error(f"Failed to save conversation log: {e}", student=student_name)
             raise

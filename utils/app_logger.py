@@ -1,6 +1,6 @@
 """
 Application logging for Preceptor Feedback Bot.
-Separate from conversation logs - tracks application events, errors, and debugging info.
+Handles logging to local files (development) or Cloud Storage (production).
 """
 
 import logging
@@ -9,6 +9,68 @@ from datetime import datetime
 
 from config import Config
 
+# Try to import GCS client (only needed in cloud)
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
+
+class CloudStorageHandler(logging.Handler):
+    """Custom logging handler that writes to Google Cloud Storage"""
+    
+    def __init__(self, bucket_name: str):
+        super().__init__()
+        if not GCS_AVAILABLE:
+            raise ImportError("google-cloud-storage package required for cloud logging")
+        
+        self.bucket_name = bucket_name
+        self.client = storage.Client()
+        self.bucket = self.client.bucket(bucket_name)
+        
+        # Buffer for log entries (write in batches)
+        self.log_buffer = []
+        self.buffer_size = 10
+        
+        # Current log file name
+        self.log_filename = f"app_{datetime.now().strftime('%Y%m%d')}.log"
+    
+    def emit(self, record):
+        """Emit a log record to Cloud Storage"""
+        try:
+            log_entry = self.format(record)
+            self.log_buffer.append(log_entry + '\n')
+            
+            # Write to GCS when buffer is full
+            if len(self.log_buffer) >= self.buffer_size:
+                self.flush()
+                
+        except Exception:
+            self.handleError(record)
+    
+    def flush(self):
+        """Flush buffered logs to Cloud Storage"""
+        if not self.log_buffer:
+            return
+        
+        try:
+            blob = self.bucket.blob(self.log_filename)
+            
+            # Append to existing content
+            existing_content = ""
+            if blob.exists():
+                existing_content = blob.download_as_text()
+            
+            new_content = existing_content + ''.join(self.log_buffer)
+            blob.upload_from_string(new_content)
+            
+            self.log_buffer = []
+            
+        except Exception as e:
+            # Fallback to stderr if GCS write fails
+            import sys
+            sys.stderr.write(f"Failed to write logs to GCS: {e}\n")
 
 class AppLogger:
     """Application logger for tracking system events"""
@@ -27,54 +89,46 @@ class AppLogger:
         """Set up the application logger"""
         # Create logger
         self._logger = logging.getLogger("preceptor_feedback_bot")
-
-        # Use configured log level from Config (default to INFO if invalid)
-        level_name = getattr(Config, "LOG_LEVEL", "INFO") or "INFO"
-        try:
-            level = getattr(logging, level_name.upper())
-        except Exception:
-            level = logging.INFO
-
-        self._logger.setLevel(level)
-
+        self._logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper()))
+        
         # Prevent duplicate handlers if reinitialized
         if self._logger.handlers:
             return
-
-        # Create logs directory if needed
-        os.makedirs(Config.LOG_DIRECTORY, exist_ok=True)
-
-        # File handler - write logs to file
-        log_filename = (
-            f"{Config.LOG_DIRECTORY}/app_{datetime.now().strftime('%Y%m%d')}.log"
-        )
-        try:
-            file_handler = logging.FileHandler(log_filename)
-        except Exception:
-            # If file handler fails (permissions, path), fall back to console-only
-            file_handler = None
-
-        # Handler levels follow configured level by default
-        handler_level = level
-
-        # Console handler
+        
+        # Console handler - always add for development/debugging
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(handler_level)
-
-        if file_handler:
-            file_handler.setLevel(handler_level)
-
+        console_handler.setLevel(logging.INFO)
+        
         # Format with timestamp, level, and message
         formatter = logging.Formatter(
-            "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            '%(asctime)s | %(levelname)-8s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
         )
-
-        if file_handler:
-            file_handler.setFormatter(formatter)
-            self._logger.addHandler(file_handler)
-
         console_handler.setFormatter(formatter)
         self._logger.addHandler(console_handler)
+        
+        # File/Cloud handler based on environment
+        if Config.LOG_TO_FILE:
+            if Config.IS_CLOUD and Config.LOG_BUCKET:
+                # Cloud: Use Cloud Storage handler
+                try:
+                    cloud_handler = CloudStorageHandler(Config.LOG_BUCKET)
+                    cloud_handler.setLevel(logging.DEBUG)
+                    cloud_handler.setFormatter(formatter)
+                    self._logger.addHandler(cloud_handler)
+                    self._logger.debug("Cloud Storage logging initialized")
+                except Exception as e:
+                    self._logger.error(f"Failed to initialize Cloud Storage logging: {e}")
+            else:
+                # Local: Use file handler
+                os.makedirs(Config.LOG_DIRECTORY, exist_ok=True)
+                log_filename = f"{Config.LOG_DIRECTORY}/app_{datetime.now().strftime('%Y%m%d')}.log"
+                file_handler = logging.FileHandler(log_filename)
+                file_handler.setLevel(logging.DEBUG)
+                file_handler.setFormatter(formatter)
+                self._logger.addHandler(file_handler)
+                self._logger.debug("File logging initialized")
+
 
     def info(self, message: str, **kwargs):
         """Log info message with optional context"""
@@ -160,6 +214,11 @@ class AppLogger:
         """Log configuration validation failure"""
         self.error(f"Configuration validation failed: {error}")
 
+    def flush(self):
+        """Flush any buffered logs (important for cloud deployment)"""
+        for handler in self._logger.handlers:  # type: ignore
+            if hasattr(handler, 'flush'):
+                handler.flush()
 
 # Global logger instance
 logger = AppLogger()
