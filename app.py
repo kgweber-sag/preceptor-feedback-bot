@@ -89,19 +89,18 @@ def initialize_session_state():
         st.session_state.current_feedback = ""
     if "student_name" not in st.session_state:
         st.session_state.student_name = ""
-    if "student_name_set" not in st.session_state:  # Track if name has been set
-        st.session_state.student_name_set = False
 
 
 def start_conversation():
     """Initialize a new conversation"""
+    # Require student name before starting
+    if not st.session_state.student_name or not st.session_state.student_name.strip():
+        st.error("Please enter a student name before starting the conversation.")
+        return
+
     try:
         st.session_state.client = VertexAIClient()
-
-        # If user provided a student name before starting, inject it so
-        # conversation logs include the student's name in the first events.
-        if st.session_state.get("student_name"):
-            st.session_state.client.set_student_name(st.session_state.student_name)
+        st.session_state.client.set_student_name(st.session_state.student_name)
 
         initial_message = st.session_state.client.start_conversation()
 
@@ -115,11 +114,12 @@ def start_conversation():
         st.session_state.conversation_started = False
 
 
-def update_student_name():
-    """Update student name in active conversation"""
-    if st.session_state.client and st.session_state.student_name:
-        st.session_state.client.set_student_name(st.session_state.student_name)
-        st.session_state.student_name_set = True
+def on_student_name_change():
+    """Callback when student name input changes - auto-captures the value"""
+    # Auto-save from the widget to session state
+    # The key binding handles this automatically, this is just for logging
+    if st.session_state.student_name_input:
+        logger.debug(f"Student name captured: {st.session_state.student_name_input}")
 
 
 def send_message(user_input: str):
@@ -219,22 +219,22 @@ def save_and_finish():
                     )
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
-                    
+
                     if Config.IS_CLOUD:
                         # Cloud: Save to Cloud Storage
                         from google.cloud import storage
+
                         client = storage.Client()
                         bucket = client.bucket(Config.LOG_BUCKET)
                         blob = bucket.blob(feedback_fname)
                         blob.upload_from_string(
-                            feedback_text,
-                            content_type='text/plain'
+                            feedback_text, content_type="text/plain"
                         )
                         feedback_path = f"gs://{Config.LOG_BUCKET}/{feedback_fname}"
                         logger.info(
                             "Feedback saved to Cloud Storage",
                             student=student_for_fname,
-                            file=feedback_path
+                            file=feedback_path,
                         )
                         st.success(f"✅ Feedback saved: {feedback_path}")
                     else:
@@ -242,17 +242,17 @@ def save_and_finish():
                         output_dir = os.path.join(".", "output")
                         os.makedirs(output_dir, exist_ok=True)
                         feedback_path = os.path.join(output_dir, feedback_fname)
-                        
+
                         with open(feedback_path, "w") as f:
                             f.write(feedback_text)
-                        
+
                         logger.info(
                             "Feedback saved to local file",
                             student=student_for_fname,
-                            file=feedback_path
+                            file=feedback_path,
                         )
                         st.success(f"✅ Feedback saved: {feedback_path}")
-                        
+
             except Exception as e:
                 logger.error(
                     f"Failed to save feedback: {e}",
@@ -268,7 +268,6 @@ def save_and_finish():
             st.session_state.feedback_generated = False
             st.session_state.current_feedback = ""
             st.session_state.student_name = ""  # Clear student name
-            st.session_state.student_name_set = False  # Reset flag
 
         except Exception as e:
             logger.error(
@@ -278,6 +277,7 @@ def save_and_finish():
     else:
         logger.error("save_and_finish called without active client")
         st.error("No active conversation.")
+
 
 # Main UI
 def main():
@@ -336,24 +336,32 @@ def main():
     st.title("🩺 Preceptor Feedback Bot")
     st.caption("A conversational tool for providing structured student feedback")
 
-    # Student name input - appears BEFORE conversation starts or if not yet set
-    if st.session_state.conversation_started and not st.session_state.student_name_set:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            student_input = st.text_input(
-                "Student Name (optional - for logging)",
-                placeholder="e.g., Jane Doe",
-                key="student_name_input",
-            )
-        with col2:
-            if st.button("Set Name", type="secondary"):
-                st.session_state.student_name = student_input
-                update_student_name()
-                st.rerun()
-
-        st.info(
-            "👆 You can set the student name now, or skip and continue the conversation"
+    # Student name input - REQUIRED before conversation starts
+    if not st.session_state.conversation_started:
+        st.markdown("### 👤 Student Information")
+        st.text_input(
+            "Student Name *",
+            placeholder="e.g., Jane Doe",
+            key="student_name_input",
+            on_change=on_student_name_change,
+            help="Required - This will be included in the feedback report",
         )
+
+        # Auto-sync from widget to session_state.student_name
+        if st.session_state.student_name_input:
+            st.session_state.student_name = st.session_state.student_name_input
+
+        # Show warning if name is missing
+        if not st.session_state.student_name:
+            st.warning(
+                "⚠️ Please enter the student's name before starting the conversation."
+            )
+        else:
+            st.success(
+                f"✓ Ready to provide feedback for: **{st.session_state.student_name}**"
+            )
+
+        st.markdown("---")
 
     # Main conversation area
     if not st.session_state.conversation_started:
