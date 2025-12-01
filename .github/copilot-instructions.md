@@ -11,17 +11,17 @@ Purpose: Help AI coding agents be productive editing and extending this reposito
 - Big-picture architecture (what to read first)
   - `app.py` — single-page Streamlit UI and session orchestration. Entry point for interactions and UI wiring.
   - `utils/vertex_ai_client.py` — wrapper around `google-genai` Vertex AI chat. Contains core functions: `start_conversation()`, `send_message()`, `generate_feedback()`, `refine_feedback()`, `save_conversation_log()`.
-  - `prompts/system_prompt.txt` — canonical system instruction that determines conversational style, probes, and the crucial rule: do NOT generate formal feedback during the conversation phase.
+  - `prompts/system_prompt.md` — canonical system instruction that determines conversational style, probes, and the crucial rule: do NOT generate formal feedback during the conversation phase.
   - `config.py` — environment-driven configuration (model, temperature, max turns, logging). Changing model happens here.
   - `utils/app_logger.py` — global singleton logger used across the app; follow its conventions when adding telemetry.
 
 - Important behavior & invariants (do not change without tests)
-  - The conversation phase must NOT produce final feedback until `generate_feedback()` is explicitly called. See `prompts/system_prompt.txt` for the instruction and `utils/vertex_ai_client.py::_contains_formal_feedback` for detection markers.
+  - The conversation phase must NOT produce final feedback until `generate_feedback()` is explicitly called. See `prompts/system_prompt.md` for the instruction and `utils/vertex_ai_client.py::_contains_formal_feedback` for detection markers.
   - `send_message()` returns `(response_text, contains_feedback)` and the Streamlit UI treats `contains_feedback` as a premature feedback flag; if you change markers, update both places.
   - Conversation logs are saved to `logs/` via `VertexAIClient.save_conversation_log()` as JSON; keep that schema stable if external tools consume logs.
 
 - Editing generative behavior
-  - To alter question style, tone, or probing logic, edit `prompts/system_prompt.txt`. Keep the “only gather information” instruction intact unless also updating the UI flow and tests.
+  - To alter question style, tone, or probing logic, edit `prompts/system_prompt.md`. Keep the “only gather information” instruction intact unless also updating the UI flow and tests.
   - If you need to change how we detect premature feedback, update the `feedback_markers` array in `utils/vertex_ai_client.py::_contains_formal_feedback` (example markers are listed in the file).
 
 - Config & deploy notes
@@ -38,7 +38,7 @@ Purpose: Help AI coding agents be productive editing and extending this reposito
   - Filesystem: `logs/` contains both application logs and conversation JSONs — check the timestamped filenames when debugging.
 
 - Examples (where to change for common tasks)
-  - Change wording/questions: edit `prompts/system_prompt.txt`.
+  - Change wording/questions: edit `prompts/system_prompt.md`.
   - Switch model: update `MODEL_NAME` in `config.py` and, if needed, add mapping in `get_model_display_name()`.
   - Tweak premature-feedback detection: edit `utils/vertex_ai_client.py::_contains_formal_feedback`.
 

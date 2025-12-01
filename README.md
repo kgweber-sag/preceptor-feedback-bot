@@ -9,13 +9,16 @@ This application guides preceptors through a brief (3-5 minute) conversation to 
 1. **Clerkship Director Summary** - Organized by strengths, areas for improvement, and developmental suggestions
 2. **Student-Facing Narrative** - Constructive, supportive feedback framed as opportunities for growth
 
-All feedback is organized according to [CWRU School of Medicine's six core competencies](https://case.edu/medicine/education/md-program/curriculum):
-- Patient Care
-- Medical Knowledge
-- Practice-Based Learning and Improvement
-- Interpersonal and Communication Skills
+All feedback is organized according to [CWRU School of Medicine's core competencies](https://case.edu/medicine/curriculum/curriculum-overview/competencies-and-education-program-objectives):
 - Professionalism
-- Systems-Based Practice
+- Teamwork and Interprofessional Collaboration
+- Reflective Practice
+- Interpersonal and Communication Skills
+- Knowledge for Practice
+- Patient Care
+- (omitted from the prompt) Research and Scholarship
+- (also omitted) Personal and Professional Development
+- Systems-based Practice
 
 ## Architecture
 
@@ -176,7 +179,7 @@ preceptor-feedback-bot/
 ├── deploy.sh                       # Deployment script
 ├── .env.example                    # Example environment variables
 ├── prompts/
-│   └── system_prompt.txt          # AI system instructions
+│   └── system_prompt.md          # AI system instructions
 ├── utils/
 │   ├── app_logger.py              # Logging utilities
 │   └── vertex_ai_client.py        # Vertex AI wrapper
@@ -266,7 +269,7 @@ rm -rf ~/.streamlit
 
 ### Editing Prompts
 
-To modify AI behavior, edit `prompts/system_prompt.txt`:
+To modify AI behavior, edit `prompts/system_prompt.md`:
 - Conversation style and tone
 - Question types and probing logic
 - Competency framework

@@ -52,7 +52,7 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")  # DEBUG, INFO, WARNING, ERROR
 
     # System Prompt Path
-    SYSTEM_PROMPT_PATH = os.getenv("SYSTEM_PROMPT_PATH", "./prompts/system_prompt.txt")
+    SYSTEM_PROMPT_PATH = os.getenv("SYSTEM_PROMPT_PATH", "./prompts/system_prompt.md")
 
     # Authentication Settings (stubbed for future use)
     REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "false").lower() == "true"

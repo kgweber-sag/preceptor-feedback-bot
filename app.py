@@ -63,7 +63,7 @@ st.set_page_config(
     page_title="Preceptor Feedback Bot",
     page_icon="🩺",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",  # Default to collapsed for mobile
 )
 
 # Initialize configuration
@@ -173,6 +173,24 @@ def generate_feedback():
         st.session_state.current_feedback = feedback
         st.session_state.feedback_generated = True
 
+        # Auto-save conversation log immediately
+        st.session_state.client.save_conversation_log(
+            st.session_state.student_name or "unknown"
+        )
+
+        # Auto-save feedback draft immediately
+        feedback_path = save_feedback_file(
+            feedback,
+            st.session_state.student_name,
+            show_success=False,  # Don't show success message yet
+        )
+        if feedback_path:
+            logger.info(
+                "Draft feedback auto-saved",
+                student=st.session_state.student_name,
+                path=feedback_path,
+            )
+
     except Exception as e:
         logger.error(
             f"Error generating feedback: {e}", student=st.session_state.student_name
@@ -191,11 +209,88 @@ def refine_feedback(refinement_request: str):
         refined = st.session_state.client.refine_feedback(refinement_request)
         st.session_state.current_feedback = refined
 
+        # Auto-update the saved feedback file with refinements
+        feedback_path = save_feedback_file(
+            refined,
+            st.session_state.student_name,
+            show_success=False,  # Don't show success message for each refinement
+        )
+        if feedback_path:
+            logger.info(
+                "Feedback updated with refinement",
+                student=st.session_state.student_name,
+                path=feedback_path,
+            )
+
     except Exception as e:
         logger.error(
             f"Error refining feedback: {e}", student=st.session_state.student_name
         )
         st.error(f"Error refining feedback: {e}")
+
+
+def save_feedback_file(
+    feedback_text: str, student_name: str, show_success: bool = True
+) -> str:
+    """Save feedback to file and return the path. Can be called multiple times to update."""
+    if not feedback_text:
+        return ""
+
+    student_for_fname = student_name or "unknown"
+    # Sanitize filename: allow alnum, dash, underscore
+    safe_student = re.sub(r"[^A-Za-z0-9_-]", "_", student_for_fname.strip())
+
+    # Use consistent timestamp stored in session state for this feedback session
+    if "feedback_timestamp" not in st.session_state:
+        st.session_state.feedback_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    timestamp = st.session_state.feedback_timestamp
+    feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
+
+    try:
+        if Config.IS_CLOUD:
+            # Cloud: Save to Cloud Storage
+            from google.cloud import storage
+
+            client = storage.Client()
+            bucket = client.bucket(Config.LOG_BUCKET)
+            blob = bucket.blob(feedback_fname)
+            blob.upload_from_string(feedback_text, content_type="text/plain")
+            feedback_path = f"gs://{Config.LOG_BUCKET}/{feedback_fname}"
+            logger.info(
+                "Feedback saved to Cloud Storage",
+                student=student_for_fname,
+                file=feedback_path,
+            )
+            if show_success:
+                st.success(f"✅ Feedback saved: {feedback_path}")
+        else:
+            # Local: Save to ./output directory
+            output_dir = os.path.join(".", "output")
+            os.makedirs(output_dir, exist_ok=True)
+            feedback_path = os.path.join(output_dir, feedback_fname)
+
+            with open(feedback_path, "w") as f:
+                f.write(feedback_text)
+
+            logger.info(
+                "Feedback saved to local file",
+                student=student_for_fname,
+                file=feedback_path,
+            )
+            if show_success:
+                st.success(f"✅ Feedback saved: {feedback_path}")
+
+        return feedback_path
+
+    except Exception as e:
+        logger.error(
+            f"Failed to save feedback: {e}",
+            student=student_name,
+        )
+        if show_success:
+            st.error(f"Error saving feedback file: {e}")
+        return ""
 
 
 def save_and_finish():
@@ -208,57 +303,13 @@ def save_and_finish():
             if filename:
                 st.success(f"✅ Conversation saved: {filename}")
 
-            # Also save the latest generated/refined feedback
-            try:
-                feedback_text = st.session_state.current_feedback or ""
-                if feedback_text:
-                    student_for_fname = st.session_state.student_name or "unknown"
-                    # Sanitize filename: allow alnum, dash, underscore
-                    safe_student = re.sub(
-                        r"[^A-Za-z0-9_-]", "_", student_for_fname.strip()
-                    )
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
-
-                    if Config.IS_CLOUD:
-                        # Cloud: Save to Cloud Storage
-                        from google.cloud import storage
-
-                        client = storage.Client()
-                        bucket = client.bucket(Config.LOG_BUCKET)
-                        blob = bucket.blob(feedback_fname)
-                        blob.upload_from_string(
-                            feedback_text, content_type="text/plain"
-                        )
-                        feedback_path = f"gs://{Config.LOG_BUCKET}/{feedback_fname}"
-                        logger.info(
-                            "Feedback saved to Cloud Storage",
-                            student=student_for_fname,
-                            file=feedback_path,
-                        )
-                        st.success(f"✅ Feedback saved: {feedback_path}")
-                    else:
-                        # Local: Save to ./output directory
-                        output_dir = os.path.join(".", "output")
-                        os.makedirs(output_dir, exist_ok=True)
-                        feedback_path = os.path.join(output_dir, feedback_fname)
-
-                        with open(feedback_path, "w") as f:
-                            f.write(feedback_text)
-
-                        logger.info(
-                            "Feedback saved to local file",
-                            student=student_for_fname,
-                            file=feedback_path,
-                        )
-                        st.success(f"✅ Feedback saved: {feedback_path}")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to save feedback: {e}",
-                    student=st.session_state.student_name,
+            # Save final feedback (if not already saved)
+            if st.session_state.current_feedback:
+                save_feedback_file(
+                    st.session_state.current_feedback,
+                    st.session_state.student_name,
+                    show_success=True,
                 )
-                st.error(f"Error saving feedback file: {e}")
 
             # Reset session - INCLUDING student name
             logger.info("Session reset", student=st.session_state.student_name)
@@ -268,6 +319,10 @@ def save_and_finish():
             st.session_state.feedback_generated = False
             st.session_state.current_feedback = ""
             st.session_state.student_name = ""  # Clear student name
+            if "feedback_timestamp" in st.session_state:
+                del (
+                    st.session_state.feedback_timestamp
+                )  # Clear timestamp for next session
 
         except Exception as e:
             logger.error(
@@ -290,7 +345,7 @@ def main():
         logger.app_started()
         st.session_state.app_started_logged = True
 
-    # Sidebar
+    # Sidebar - Configuration info only (collapsible for mobile)
     with st.sidebar:
         st.title("⚙️ Configuration")
 
@@ -306,22 +361,6 @@ def main():
             st.markdown("### Current Session")
             st.text(f"Turn: {st.session_state.client.turn_count}/{Config.MAX_TURNS}")
 
-        st.markdown("---")
-
-        if st.button(
-            "🔄 Start New Conversation", type="primary", use_container_width=True
-        ):
-            start_conversation()
-            st.rerun()
-
-        if st.session_state.conversation_started:
-            if st.button("📝 Generate Feedback", use_container_width=True):
-                generate_feedback()
-                st.rerun()
-
-        st.markdown("---")
-        st.caption(f"Project: {Config.GCP_PROJECT_ID}")
-        st.caption(f"Region: {Config.GCP_REGION}")
         st.markdown("---")
         with st.expander("ℹ️ Deployment Info"):
             st.caption(f"Environment: {Config.DEPLOYMENT_ENV}")
@@ -339,6 +378,7 @@ def main():
     # Student name input - REQUIRED before conversation starts
     if not st.session_state.conversation_started:
         st.markdown("### 👤 Student Information")
+
         st.text_input(
             "Student Name *",
             placeholder="e.g., Jane Doe",
@@ -351,7 +391,7 @@ def main():
         if st.session_state.student_name_input:
             st.session_state.student_name = st.session_state.student_name_input
 
-        # Show warning if name is missing
+        # Show status message
         if not st.session_state.student_name:
             st.warning(
                 "⚠️ Please enter the student's name before starting the conversation."
@@ -361,22 +401,30 @@ def main():
                 f"✓ Ready to provide feedback for: **{st.session_state.student_name}**"
             )
 
+            # Start button appears below the success banner
+            if st.button(
+                "🔄 Start Conversation",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_conversation()
+                st.rerun()
+
         st.markdown("---")
 
     # Main conversation area
     if not st.session_state.conversation_started:
-        st.info("👈 Click **Start New Conversation** in the sidebar to begin")
-
         # Instructions
         st.markdown(
             """
         ### How This Works
         
-        1. **Start a conversation** - The bot will ask you about your interaction with a medical student
-        2. **Answer questions** - Provide observations about the student's performance
-        3. **Generate feedback** - The bot creates structured feedback for the clerkship director and student
-        4. **Review and refine** - Edit or request changes before finalizing
-        5. **Save** - Copy the feedback to your assessment system
+        1. **Enter student name** - Required for the feedback report
+        2. **Start conversation** - Click the button above to begin
+        3. **Answer questions** - The bot will ask about the student's performance
+        4. **Generate feedback** - Click the button when conversation is complete
+        5. **Review and refine** - Edit or request changes before finalizing
+        6. **Download & Save** - Get a copy for yourself and save to server logs
         
         This tool organizes your observations according to CWRU's competency framework and generates 
         both a summary for administrators and constructive narrative feedback for the student.
@@ -389,12 +437,26 @@ def main():
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # Chat input (only show if feedback not yet generated)
+        # Chat input and Generate Feedback button (only show if feedback not yet generated)
         if not st.session_state.feedback_generated:
+            # Chat input appears at bottom (pinned by Streamlit)
             user_input = st.chat_input("Type your response here...")
             if user_input:
                 send_message(user_input)
                 st.rerun()
+
+            # Generate Feedback button - rendered after chat but appears above due to chat_input pinning
+            st.markdown("")  # Small spacing
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button(
+                    "📝 Generate Feedback",
+                    type="primary",
+                    use_container_width=True,
+                    help="Ready to generate feedback? Click here when conversation is complete",
+                ):
+                    generate_feedback()
+                    st.rerun()
 
         # Feedback display and refinement
         if st.session_state.feedback_generated:
@@ -405,24 +467,50 @@ def main():
 
             st.markdown("---")
 
-            col1, col2 = st.columns([3, 1])
+            # Refinement input
+            refinement = st.text_input(
+                "Request changes (optional)",
+                placeholder="e.g., 'Make it more concise' or 'Add more emphasis on teamwork'",
+            )
+            if refinement and st.button("🔄 Refine Feedback"):
+                refine_feedback(refinement)
+                st.rerun()
+
+            st.markdown("---")
+
+            # Action buttons
+            col1, col2, col3 = st.columns([2, 2, 2])
 
             with col1:
-                refinement = st.text_input(
-                    "Request changes (optional)",
-                    placeholder="e.g., 'Make it more concise' or 'Add more emphasis on teamwork'",
+                # Prepare download filename
+                student_for_fname = st.session_state.student_name or "unknown"
+                safe_student = re.sub(r"[^A-Za-z0-9_-]", "_", student_for_fname.strip())
+                timestamp = st.session_state.get(
+                    "feedback_timestamp", datetime.now().strftime("%Y%m%d_%H%M%S")
                 )
-                if refinement and st.button("🔄 Refine Feedback"):
-                    refine_feedback(refinement)
-                    st.rerun()
+                download_fname = f"feedback_{safe_student}_{timestamp}.txt"
+
+                st.download_button(
+                    label="📥 Download Feedback",
+                    data=st.session_state.current_feedback,
+                    file_name=download_fname,
+                    mime="text/plain",
+                    use_container_width=True,
+                )
 
             with col2:
                 if st.button(
-                    "✅ Finish & Save", type="primary", use_container_width=True
+                    "✅ Finish, Save, and Clear",
+                    type="primary",
+                    use_container_width=True,
                 ):
                     save_and_finish()
-                    st.success("Conversation completed and saved!")
+                    st.success("Conversation completed and saved to server logs!")
                     st.rerun()
+
+            with col3:
+                # Empty column for spacing / future use
+                pass
 
 
 if __name__ == "__main__":
