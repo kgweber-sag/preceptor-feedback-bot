@@ -3,6 +3,7 @@ Preceptor Feedback Bot - Streamlit Application
 A conversational tool for faculty to provide structured feedback on medical students.
 """
 
+import json
 import os
 import re
 from datetime import datetime
@@ -89,6 +90,8 @@ def initialize_session_state():
         st.session_state.current_feedback = ""
     if "student_name" not in st.session_state:
         st.session_state.student_name = ""
+    if "show_survey" not in st.session_state:
+        st.session_state.show_survey = False
 
 
 def start_conversation():
@@ -311,18 +314,12 @@ def save_and_finish():
                     show_success=True,
                 )
 
-            # Reset session - INCLUDING student name
-            logger.info("Session reset", student=st.session_state.student_name)
-            st.session_state.client = None
-            st.session_state.conversation_started = False
-            st.session_state.messages = []
-            st.session_state.feedback_generated = False
-            st.session_state.current_feedback = ""
-            st.session_state.student_name = ""  # Clear student name
-            if "feedback_timestamp" in st.session_state:
-                del (
-                    st.session_state.feedback_timestamp
-                )  # Clear timestamp for next session
+            # Show survey instead of immediately resetting
+            logger.info(
+                "Session completed, showing survey",
+                student=st.session_state.student_name,
+            )
+            st.session_state.show_survey = True
 
         except Exception as e:
             logger.error(
@@ -332,6 +329,63 @@ def save_and_finish():
     else:
         logger.error("save_and_finish called without active client")
         st.error("No active conversation.")
+
+
+def submit_survey():
+    """Save survey responses and reset session"""
+    # Gather survey data
+    survey_data = {
+        "timestamp": datetime.now().isoformat(),
+        "preceptor_name": st.session_state.get("survey_preceptor_name", ""),
+        "tool_rating": st.session_state.get("survey_rating", ""),
+        "comments": st.session_state.get("survey_comments", ""),
+        "student_name": st.session_state.student_name,
+    }
+
+    # Log survey response
+    logger.info(
+        "Survey response received",
+        preceptor=survey_data["preceptor_name"],
+        rating=survey_data["tool_rating"],
+        student=survey_data["student_name"],
+    )
+
+    # Save survey to file
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        survey_fname = f"survey_{timestamp}.json"
+
+        if Config.IS_CLOUD:
+            from google.cloud import storage
+
+            client = storage.Client()
+            bucket = client.bucket(Config.LOG_BUCKET)
+            blob = bucket.blob(survey_fname)
+            blob.upload_from_string(
+                json.dumps(survey_data, indent=2), content_type="application/json"
+            )
+            logger.info(f"Survey saved to gs://{Config.LOG_BUCKET}/{survey_fname}")
+        else:
+            # Save to output directory (same as feedback files)
+            output_dir = os.path.join(".", "output")
+            os.makedirs(output_dir, exist_ok=True)
+            survey_path = os.path.join(output_dir, survey_fname)
+            with open(survey_path, "w") as f:
+                json.dump(survey_data, f, indent=2)
+            logger.info(f"Survey saved to {survey_path}")
+    except Exception as e:
+        logger.error(f"Failed to save survey: {e}")
+
+    # Reset session
+    st.session_state.client = None
+    st.session_state.conversation_started = False
+    st.session_state.messages = []
+    st.session_state.feedback_generated = False
+    st.session_state.current_feedback = ""
+    st.session_state.student_name = ""
+    st.session_state.show_survey = False
+    if "feedback_timestamp" in st.session_state:
+        del st.session_state.feedback_timestamp
 
 
 # Main UI
@@ -374,6 +428,48 @@ def main():
     # Main content area
     st.title("🩺 Preceptor Feedback Bot")
     st.caption("A conversational tool for providing structured student feedback")
+
+    # Show survey if session just completed
+    if st.session_state.show_survey:
+        st.success("✅ Feedback session completed and saved!")
+        st.markdown("---")
+        st.markdown(
+            "### If you have another minute, we'd appreciate your feedback on this tool"
+        )
+
+        st.text_input(
+            "Preceptor Name (optional)",
+            key="survey_preceptor_name",
+            placeholder="Your name",
+        )
+
+        st.radio(
+            "This tool...",
+            options=[
+                "Was great on the first try",
+                "Gave me something helpful I can edit",
+                "Not especially helpful",
+            ],
+            key="survey_rating",
+        )
+
+        st.text_area(
+            "Comments (optional)",
+            key="survey_comments",
+            placeholder="Any feedback or suggestions for improvement?",
+        )
+
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("Submit Feedback", type="primary", use_container_width=True):
+                submit_survey()
+                st.rerun()
+        with col2:
+            if st.button("Skip", use_container_width=True):
+                submit_survey()  # Still resets session, just doesn't save survey
+                st.rerun()
+
+        st.stop()  # Don't show rest of UI while survey is displayed
 
     # Student name input - REQUIRED before conversation starts
     if not st.session_state.conversation_started:

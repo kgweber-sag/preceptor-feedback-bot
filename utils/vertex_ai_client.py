@@ -237,12 +237,17 @@ Please format clearly with headers."""
         )
 
         try:
+            # Log the user's refinement request
+            self._log_turn("user", refinement_request)
+            
             response = self.chat.send_message(refinement_request)
             if response is None or not response.text:
                 logger.error(
                     "No response received from model during feedback refinement"
                 )
                 raise ValueError("No response received from model")
+            
+            # Log the assistant's refined response
             self._log_turn("assistant", response.text)
 
             logger.debug("Feedback refinement completed", student=self.student_name)
