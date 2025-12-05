@@ -179,14 +179,17 @@ class VertexAIClient:
         self._log_turn("user", user_message)
 
         try:
-            # Send message to model with backoff
+            # Send message to model with backoff and track response time
+            start_time = time.time()
             response = self._call_with_backoff(self.chat.send_message, user_message)
+            response_time_ms = (time.time() - start_time) * 1000
+
             if response is None or not response.text:
                 logger.error("No response received from model")
                 raise ValueError("No response received from model")
 
-            # Log assistant response
-            self._log_turn("assistant", response.text)
+            # Log assistant response with timing
+            self._log_turn("assistant", response.text, response_time_ms)
 
             # Check if model generated feedback prematurely
             premature_feedback = self._contains_formal_feedback(response.text)
@@ -229,18 +232,22 @@ class VertexAIClient:
 Please format clearly with headers."""
 
         try:
+            start_time = time.time()
             response = self._call_with_backoff(self.chat.send_message, prompt)
+            response_time_ms = (time.time() - start_time) * 1000
+
             if response is None or not response.text:
                 logger.error(
                     "No response received from model during feedback generation"
                 )
                 raise ValueError("No response received from model")
-            self._log_turn("assistant", response.text)
+            self._log_turn("assistant", response.text, response_time_ms)
 
             logger.info(
                 "Feedback generation completed",
                 student=self.student_name,
                 feedback_length=len(response.text),
+                response_time_ms=round(response_time_ms, 2),
             )
 
             return response.text
@@ -265,17 +272,20 @@ Please format clearly with headers."""
             # Log the user's refinement request
             self._log_turn("user", refinement_request)
 
+            start_time = time.time()
             response = self._call_with_backoff(
                 self.chat.send_message, refinement_request
             )
+            response_time_ms = (time.time() - start_time) * 1000
+
             if response is None or not response.text:
                 logger.error(
                     "No response received from model during feedback refinement"
                 )
-                raise ValueError(
-                    "No response received from model"
-                )  # Log the assistant's refined response
-            self._log_turn("assistant", response.text)
+                raise ValueError("No response received from model")
+
+            # Log the assistant's refined response with timing
+            self._log_turn("assistant", response.text, response_time_ms)
 
             logger.debug("Feedback refinement completed", student=self.student_name)
 
@@ -287,16 +297,18 @@ Please format clearly with headers."""
             )
             raise
 
-    def _log_turn(self, role: str, content: str):
+    def _log_turn(self, role: str, content: str, response_time_ms: float = None):
         """Log a conversation turn"""
-        self.conversation_history.append(
-            {
-                "timestamp": datetime.now().isoformat(),
-                "turn": self.turn_count,
-                "role": role,
-                "content": content,
-            }
-        )
+        turn_data = {
+            "timestamp": datetime.now().isoformat(),
+            "turn": self.turn_count,
+            "role": role,
+            "content": content,
+        }
+        if response_time_ms is not None:
+            turn_data["response_time_ms"] = round(response_time_ms, 2)
+
+        self.conversation_history.append(turn_data)
 
     def _contains_formal_feedback(self, text: str) -> bool:
         """
@@ -329,7 +341,7 @@ Please format clearly with headers."""
 
         # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"conversation_{student_name}_{timestamp}.json"
+        filename = f"conversation_{timestamp}_{student_name}.json"
 
         # Prepare log data
         log_data = {
