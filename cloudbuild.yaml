@@ -21,8 +21,10 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--timeout'
+      - '600'
       - '--set-env-vars'
-      - 'DEPLOYMENT_ENV=cloud,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=us-central1,MODEL_NAME=gemini-2.0-flash-exp,LOG_BUCKET=meded-feedback-bot-logs'
+      - 'DEPLOYMENT_ENV=cloud,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=us-central1,MODEL_NAME=gemini-2.0-flash-exp,LOG_BUCKET=meded-feedback-bot-logs,CLOUD_RUN_TIMEOUT=600'
 
 images:
   - 'gcr.io/$PROJECT_ID/preceptor-feedback-bot:$COMMIT_SHA'

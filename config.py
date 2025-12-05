@@ -37,6 +37,11 @@ class Config:
     MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
     MIN_COMPETENCY_COVERAGE = int(os.getenv("MIN_COMPETENCY_COVERAGE", "3"))
 
+    # Cloud Run Settings
+    CLOUD_RUN_TIMEOUT = int(
+        os.getenv("CLOUD_RUN_TIMEOUT", "600")
+    )  # seconds (default 10 minutes)
+
     # Logging Settings
     LOG_TO_FILE = os.getenv("LOG_TO_FILE", "true").lower() == "true"
 

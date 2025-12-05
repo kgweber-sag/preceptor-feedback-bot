@@ -5,10 +5,12 @@ Supports Gemini models through Vertex AI.
 
 import json
 import os
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from google import genai
+from google.api_core import exceptions
 from google.genai import types
 
 from config import Config
@@ -77,6 +79,31 @@ class VertexAIClient:
         if old_name != self.student_name:
             logger.debug(f"Student name updated: {old_name} -> {self.student_name}")
 
+    def _call_with_backoff(self, func, *args, max_retries=3, **kwargs):
+        """Call a function with exponential backoff on 429 errors"""
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except exceptions.ResourceExhausted as e:
+                if attempt == max_retries - 1:
+                    logger.error(
+                        f"Max retries ({max_retries}) exceeded for API call",
+                        student=self.student_name,
+                        error=str(e),
+                    )
+                    raise
+
+                # Exponential backoff: 2^attempt seconds (1s, 2s, 4s)
+                wait_time = 2**attempt
+                logger.warning(
+                    f"Rate limit hit (429), retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})",
+                    student=self.student_name,
+                )
+                time.sleep(wait_time)
+            except Exception:
+                # For non-429 errors, raise immediately
+                raise
+
     def _load_system_prompt(self) -> str:
         """Load system prompt from file"""
         try:
@@ -117,12 +144,10 @@ class VertexAIClient:
             else:
                 initial_prompt = "Please provide your transparency statement and first question to the preceptor."
 
-            response = self.chat.send_message(initial_prompt)
+            response = self._call_with_backoff(self.chat.send_message, initial_prompt)
             if response is None or not response.text:
                 logger.error("No response received from model on conversation start")
-                raise ValueError("No response received from model")
-
-            # Log the exchange
+                raise ValueError("No response received from model")  # Log the exchange
             self._log_turn("system", initial_prompt)
             self._log_turn("assistant", response.text)
 
@@ -154,8 +179,8 @@ class VertexAIClient:
         self._log_turn("user", user_message)
 
         try:
-            # Send message to model
-            response = self.chat.send_message(user_message)
+            # Send message to model with backoff
+            response = self._call_with_backoff(self.chat.send_message, user_message)
             if response is None or not response.text:
                 logger.error("No response received from model")
                 raise ValueError("No response received from model")
@@ -204,7 +229,7 @@ class VertexAIClient:
 Please format clearly with headers."""
 
         try:
-            response = self.chat.send_message(prompt)
+            response = self._call_with_backoff(self.chat.send_message, prompt)
             if response is None or not response.text:
                 logger.error(
                     "No response received from model during feedback generation"
@@ -239,15 +264,17 @@ Please format clearly with headers."""
         try:
             # Log the user's refinement request
             self._log_turn("user", refinement_request)
-            
-            response = self.chat.send_message(refinement_request)
+
+            response = self._call_with_backoff(
+                self.chat.send_message, refinement_request
+            )
             if response is None or not response.text:
                 logger.error(
                     "No response received from model during feedback refinement"
                 )
-                raise ValueError("No response received from model")
-            
-            # Log the assistant's refined response
+                raise ValueError(
+                    "No response received from model"
+                )  # Log the assistant's refined response
             self._log_turn("assistant", response.text)
 
             logger.debug("Feedback refinement completed", student=self.student_name)

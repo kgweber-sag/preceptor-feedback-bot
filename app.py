@@ -410,6 +410,8 @@ def main():
 
         st.markdown("### Conversation Settings")
         st.text(f"Max Turns: {Config.MAX_TURNS}")
+        if Config.IS_CLOUD:
+            st.text(f"Session Timeout: {Config.CLOUD_RUN_TIMEOUT // 60} min")
 
         if st.session_state.conversation_started and st.session_state.client:
             st.markdown("### Current Session")
