@@ -232,6 +232,16 @@ class VertexAIClient:
 Please format clearly with headers."""
 
         try:
+            # Log the feedback generation request
+            self.conversation_history.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "turn": "feedback_generation",
+                    "role": "system",
+                    "content": prompt,
+                }
+            )
+
             start_time = time.time()
             response = self._call_with_backoff(self.chat.send_message, prompt)
             response_time_ms = (time.time() - start_time) * 1000
@@ -241,7 +251,17 @@ Please format clearly with headers."""
                     "No response received from model during feedback generation"
                 )
                 raise ValueError("No response received from model")
-            self._log_turn("assistant", response.text, response_time_ms)
+
+            # Log feedback generation with special turn marker (not a regular conversation turn)
+            self.conversation_history.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "turn": "feedback_generation",
+                    "role": "assistant",
+                    "content": response.text,
+                    "response_time_ms": round(response_time_ms, 2),
+                }
+            )
 
             logger.info(
                 "Feedback generation completed",
@@ -269,8 +289,15 @@ Please format clearly with headers."""
         )
 
         try:
-            # Log the user's refinement request
-            self._log_turn("user", refinement_request)
+            # Log the user's refinement request with special turn marker
+            self.conversation_history.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "turn": "feedback_refinement",
+                    "role": "user",
+                    "content": refinement_request,
+                }
+            )
 
             start_time = time.time()
             response = self._call_with_backoff(
@@ -284,8 +311,16 @@ Please format clearly with headers."""
                 )
                 raise ValueError("No response received from model")
 
-            # Log the assistant's refined response with timing
-            self._log_turn("assistant", response.text, response_time_ms)
+            # Log the assistant's refined response with special turn marker
+            self.conversation_history.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "turn": "feedback_refinement",
+                    "role": "assistant",
+                    "content": response.text,
+                    "response_time_ms": round(response_time_ms, 2),
+                }
+            )
 
             logger.debug("Feedback refinement completed", student=self.student_name)
 

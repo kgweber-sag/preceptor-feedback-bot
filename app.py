@@ -248,7 +248,7 @@ def save_feedback_file(
         st.session_state.feedback_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     timestamp = st.session_state.feedback_timestamp
-    feedback_fname = f"feedback_{safe_student}_{timestamp}.txt"
+    feedback_fname = f"feedback_{timestamp}_{safe_student}.txt"
 
     try:
         if Config.IS_CLOUD:
@@ -300,18 +300,21 @@ def save_and_finish():
     """Save conversation log and finish"""
     if st.session_state.client:
         try:
-            filename = st.session_state.client.save_conversation_log(
-                st.session_state.student_name or "unknown"
-            )
-            if filename:
-                st.success(f"✅ Conversation saved: {filename}")
+            # Conversation log already saved during generate_feedback() and refinements
+            # Just confirm
+            st.success("✅ Conversation and feedback saved!")
 
-            # Save final feedback (if not already saved)
+            # ALWAYS save final feedback to ensure we have the latest version
             if st.session_state.current_feedback:
-                save_feedback_file(
+                feedback_path = save_feedback_file(
                     st.session_state.current_feedback,
                     st.session_state.student_name,
-                    show_success=True,
+                    show_success=False,  # Already showing success above
+                )
+                logger.info(
+                    "Final feedback saved",
+                    student=st.session_state.student_name,
+                    path=feedback_path,
                 )
 
             # Show survey instead of immediately resetting
@@ -496,7 +499,7 @@ def main():
             )
         else:
             st.success(
-                f"✓ Ready to provide feedback for: **{st.session_state.student_name}**"
+                f"✓ Ready to provide feedback for: **{st.session_state.student_name}**. This session will time out after {Config.CLOUD_RUN_TIMEOUT // 60} minutes of inactivity."
             )
 
             # Start button appears below the success banner
