@@ -12,8 +12,8 @@
         </p>
     </div>
 
-    <div class="feedback-content whitespace-pre-wrap text-gray-800 leading-relaxed">
-        {{ current_content }}
+    <div class="feedback-content text-gray-800 leading-relaxed">
+        {{ current_content | markdown | safe }}
     </div>
 </div>
 

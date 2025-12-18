@@ -106,5 +106,14 @@
         // Could show a modal or toast here
         console.log('Premature feedback detected');
     });
+
+    // Update turn counter when server sends the event
+    document.body.addEventListener('updateTurnCounter', function(evt) {
+        const counter = document.getElementById('turn-counter');
+        if (counter && evt.detail && evt.detail.count !== undefined) {
+            counter.textContent = 'Turn ' + evt.detail.count;
+            console.log('Turn counter updated to:', evt.detail.count);
+        }
+    });
 </script>
 {% endblock %}

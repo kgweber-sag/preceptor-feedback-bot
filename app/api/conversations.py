@@ -145,16 +145,16 @@ async def send_message(
             message={"role": "assistant", "content": ai_response.content}
         )
 
-        # Update turn counter using out-of-band swap
-        # HTMX requires exact ID match and hx-swap-oob attribute
-        turn_counter_html = f'<p id="turn-counter" class="text-sm text-gray-500" hx-swap-oob="outerHTML">Turn {updated_conversation.metadata.total_turns}</p>'
-
-        # Debug: print what we're returning
-        full_response = user_message_html + ai_message_html + turn_counter_html
+        # Update turn counter using custom header
+        # More reliable than out-of-band swaps which can be finicky
         print(f"DEBUG: Returning turn count: {updated_conversation.metadata.total_turns}")
-        print(f"DEBUG: Turn counter HTML: {turn_counter_html}")
 
-        return HTMLResponse(content=full_response)
+        return HTMLResponse(
+            content=user_message_html + ai_message_html,
+            headers={
+                "HX-Trigger": f'{{"updateTurnCounter": {{"count": {updated_conversation.metadata.total_turns}}}}}'
+            }
+        )
 
     except HTTPException:
         raise

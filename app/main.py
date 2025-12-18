@@ -63,7 +63,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 # Add custom template filters
+from app.utils.markdown import markdown_to_html
 templates.env.filters["timeago"] = lambda dt: "just now"  # Placeholder for timeago filter
+templates.env.filters["markdown"] = markdown_to_html
 
 
 # Include API routers
