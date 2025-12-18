@@ -117,6 +117,7 @@ async def dashboard(request: Request):
         <title>Dashboard - {settings.APP_NAME}</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
     </head>
     <body class="bg-gray-50 p-8">
         <div class="max-w-4xl mx-auto">

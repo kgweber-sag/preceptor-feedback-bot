@@ -148,6 +148,53 @@ class VertexAIClient:
         except Exception as e:
             raise Exception(f"Error starting conversation: {str(e)}")
 
+    def restore_conversation(self, conversation_history: List[Dict]) -> None:
+        """
+        Restore a chat session from existing conversation history.
+
+        This method recreates the chat context by initializing a new chat with
+        the full conversation history. This preserves the conversational context
+        without needing to replay messages.
+
+        Args:
+            conversation_history: List of message dicts with role, content, timestamp, turn
+        """
+        try:
+            # Create chat configuration
+            config = types.GenerateContentConfig(
+                system_instruction=self.system_prompt,
+                temperature=settings.TEMPERATURE,
+                max_output_tokens=settings.MAX_OUTPUT_TOKENS,
+            )
+
+            # Convert conversation history to format expected by chat API
+            # Filter out system messages (like initial prompt), keep only user/assistant exchanges
+            chat_history = []
+            for msg in conversation_history:
+                role = msg["role"]
+                # Skip system messages - they're not part of the user/assistant exchange
+                if role in ["user", "assistant"]:
+                    # Map 'assistant' to 'model' (required by API)
+                    api_role = "model" if role == "assistant" else "user"
+                    chat_history.append({
+                        "role": api_role,
+                        "parts": [{"text": msg["content"]}]
+                    })
+
+            # Initialize chat with existing history
+            self.chat = self.client.chats.create(
+                model=settings.MODEL_NAME,
+                config=config,
+                history=chat_history
+            )
+
+            # Restore conversation history and turn count
+            self.conversation_history = conversation_history.copy()
+            self.turn_count = max([msg["turn"] for msg in conversation_history if isinstance(msg["turn"], int)], default=0)
+
+        except Exception as e:
+            raise Exception(f"Error restoring conversation: {str(e)}")
+
     def send_message(self, user_message: str) -> Dict:
         """
         Send a message and get response.

@@ -101,27 +101,12 @@ class ConversationService:
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
 
-        # Initialize AI client with conversation history
+        # Initialize AI client
         ai_client = VertexAIClient(conversation_id=conversation_id)
         ai_client.set_student_name(conversation.student_name)
 
-        # Restore conversation state
-        ai_client.conversation_history = [
-            msg.model_dump() for msg in conversation.messages
-        ]
-        ai_client.turn_count = conversation.metadata.total_turns
-
-        # Recreate chat session (need to replay messages)
-        ai_client.start_conversation()  # This will overwrite history, so we need a different approach
-
-        # Actually, for stateful chat, we need to keep the VertexAIClient instance
-        # For now, let's use a simpler approach: start fresh and replay
-
-        # Better approach: Store the full conversation state
-        # For MVP, we'll accept that we restart the chat context each time
-        # (The system prompt still guides the conversation)
-
-        ai_client.conversation_history = [
+        # Convert Firestore messages to dict format for restoration
+        conversation_history = [
             {
                 "timestamp": msg.timestamp.isoformat(),
                 "turn": msg.turn,
@@ -131,12 +116,9 @@ class ConversationService:
             }
             for msg in conversation.messages
         ]
-        ai_client.turn_count = conversation.metadata.total_turns
 
-        # Create a new chat with the conversation history
-        # Note: This is a limitation - we're starting a fresh chat
-        # In production, we'd want to cache the chat session in memory
-        ai_client.start_conversation()
+        # Restore conversation context by replaying history
+        ai_client.restore_conversation(conversation_history)
 
         # Send user message
         response_data = ai_client.send_message(user_message)

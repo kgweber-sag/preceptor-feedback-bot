@@ -31,6 +31,7 @@
         <div id="chat-input-container">
             <form
                 hx-post="/conversations/{{ conversation.conversation_id }}/messages"
+                hx-ext="json-enc"
                 hx-target="#message-list"
                 hx-swap="beforeend"
                 hx-on::after-request="this.reset(); this.querySelector('input').focus()"
