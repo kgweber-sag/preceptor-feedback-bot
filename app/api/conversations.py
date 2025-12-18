@@ -11,9 +11,13 @@ from app.dependencies import get_current_user, get_firestore
 from app.services.firestore_service import FirestoreService
 from app.services.conversation_service import ConversationService
 from app.models.conversation import ConversationCreate, MessageCreate
+from app.utils.markdown import markdown_to_html
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+# Register markdown filter for this router's templates
+templates.env.filters["markdown"] = markdown_to_html
 
 
 @router.post("")

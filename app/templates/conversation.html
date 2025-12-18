@@ -53,7 +53,7 @@
                 </button>
             </form>
 
-            <p class="text-xs text-gray-500 mt-2">
+            <p id="turn-counter-footer" class="text-xs text-gray-500 mt-2">
                 Press Enter to send • {{ conversation.metadata.total_turns }} turns used
             </p>
         </div>
@@ -109,10 +109,20 @@
 
     // Update turn counter when server sends the event
     document.body.addEventListener('updateTurnCounter', function(evt) {
-        const counter = document.getElementById('turn-counter');
-        if (counter && evt.detail && evt.detail.count !== undefined) {
-            counter.textContent = 'Turn ' + evt.detail.count;
-            console.log('Turn counter updated to:', evt.detail.count);
+        if (evt.detail && evt.detail.count !== undefined) {
+            // Update header counter
+            const counter = document.getElementById('turn-counter');
+            if (counter) {
+                counter.textContent = 'Turn ' + evt.detail.count;
+            }
+
+            // Update footer counter
+            const footerCounter = document.getElementById('turn-counter-footer');
+            if (footerCounter) {
+                footerCounter.textContent = 'Press Enter to send • ' + evt.detail.count + ' turns used';
+            }
+
+            console.log('Turn counters updated to:', evt.detail.count);
         }
     });
 </script>
