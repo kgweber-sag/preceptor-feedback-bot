@@ -101,16 +101,16 @@ async def refine_feedback(
             refinement_request=refinement_data.refinement_request
         )
 
-        # Return updated feedback content
-        return templates.TemplateResponse(
-            "components/feedback_content.html",
-            {
-                "request": request,
-                "feedback": feedback,
-                "content": feedback.get_current_content(),
-                "conversation_id": conversation_id,
-            },
+        # Return updated feedback content as HTML (not TemplateResponse)
+        # This ensures HTMX can swap it properly
+        content_html = templates.get_template("components/feedback_content.html").render(
+            request=request,
+            feedback=feedback,
+            current_content=feedback.get_current_content(),
+            conversation_id=conversation_id,
         )
+
+        return HTMLResponse(content=content_html)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

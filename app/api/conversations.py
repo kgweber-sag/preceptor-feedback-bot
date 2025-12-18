@@ -146,9 +146,15 @@ async def send_message(
         )
 
         # Update turn counter using out-of-band swap
-        turn_counter_html = f'<p id="turn-counter" class="text-sm text-gray-500" hx-swap-oob="true">Turn {updated_conversation.metadata.total_turns}</p>'
+        # HTMX requires exact ID match and hx-swap-oob attribute
+        turn_counter_html = f'<p id="turn-counter" class="text-sm text-gray-500" hx-swap-oob="outerHTML">Turn {updated_conversation.metadata.total_turns}</p>'
 
-        return HTMLResponse(content=user_message_html + ai_message_html + turn_counter_html)
+        # Debug: print what we're returning
+        full_response = user_message_html + ai_message_html + turn_counter_html
+        print(f"DEBUG: Returning turn count: {updated_conversation.metadata.total_turns}")
+        print(f"DEBUG: Turn counter HTML: {turn_counter_html}")
+
+        return HTMLResponse(content=full_response)
 
     except HTTPException:
         raise
