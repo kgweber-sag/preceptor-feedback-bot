@@ -5,6 +5,7 @@ Supports Gemini models through Vertex AI.
 
 import json
 import os
+import random
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -79,8 +80,14 @@ class VertexAIClient:
         if old_name != self.student_name:
             logger.debug(f"Student name updated: {old_name} -> {self.student_name}")
 
-    def _call_with_backoff(self, func, *args, max_retries=3, **kwargs):
-        """Call a function with exponential backoff on 429 errors"""
+    def _call_with_backoff(self, func, *args, max_retries=5, **kwargs):
+        """
+        Call a function with exponential backoff on 429 errors.
+
+        Uses exponential backoff with jitter to handle rate limits gracefully.
+        Retries up to 5 times with increasing delays: ~2s, ~4s, ~8s, ~16s, ~32s
+        Total max wait time: ~60 seconds
+        """
         for attempt in range(max_retries):
             try:
                 return func(*args, **kwargs)
@@ -93,10 +100,14 @@ class VertexAIClient:
                     )
                     raise
 
-                # Exponential backoff: 2^attempt seconds (1s, 2s, 4s)
-                wait_time = 2**attempt
+                # Exponential backoff with jitter: 2^attempt + random(0-1) seconds
+                # This prevents multiple clients from retrying simultaneously
+                base_wait = 2**attempt
+                jitter = random.uniform(0, 1)
+                wait_time = base_wait + jitter
+
                 logger.warning(
-                    f"Rate limit hit (429), retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})",
+                    f"Rate limit hit (429), retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})",
                     student=self.student_name,
                 )
                 time.sleep(wait_time)
