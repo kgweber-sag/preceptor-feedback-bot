@@ -24,7 +24,7 @@ steps:
       - '--timeout'
       - '600'
       - '--set-env-vars'
-      - 'DEPLOYMENT_ENV=cloud,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=us-central1,MODEL_NAME=gemini-2.0-flash-001,LOG_BUCKET=meded-feedback-bot-logs,CLOUD_RUN_TIMEOUT=600'
+      - 'DEPLOYMENT_ENV=cloud,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=us-central1,MODEL_NAME=gemini-2.5-flash,LOG_BUCKET=meded-feedback-bot-logs,CLOUD_RUN_TIMEOUT=600'
 
 images:
   - 'gcr.io/$PROJECT_ID/preceptor-feedback-bot:$COMMIT_SHA'

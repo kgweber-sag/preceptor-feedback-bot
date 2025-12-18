@@ -207,7 +207,7 @@ Special turn markers: `"turn": "feedback_generation"`, `"turn": "feedback_refine
 - Ensure Cloud Run and `.env` both specify the same region
 
 **Model Selection:**
-- **Use stable model versions** (e.g., `gemini-2.0-flash-001`)
+- **Use stable model versions** (e.g., `gemini-2.5-flash`)
 - **Avoid experimental models** (suffix `-exp`) unless necessary
 - Experimental models have drastically lower rate limits (2-10 RPM vs 60+ RPM)
 - Can trigger 429 errors even with very low usage (5-6 calls in a few minutes)
@@ -215,7 +215,7 @@ Special turn markers: `"turn": "feedback_generation"`, `"turn": "feedback_refine
 **Example of correct configuration:**
 ```bash
 GCP_REGION=us-central1          # NOT "global"
-MODEL_NAME=gemini-2.0-flash-001 # NOT "gemini-2.0-flash-exp"
+MODEL_NAME=gemini-2.5-flash # NOT "gemini-2.0-flash-exp"
 ```
 
 ## Deployment Environments
