@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Conversation: {{ conversation.student_name }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Feedback Session</h1>
+                <p class="text-gray-600 mt-1">Student: <span class="font-medium">{{ conversation.student_name }}</span></p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm text-gray-500">Turn {{ max_turns }} / {{ conversation.metadata.total_turns }}</p>
+                <p class="text-xs text-gray-400 mt-1">{{ conversation.metadata.model }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Messages Container -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div id="message-list" class="space-y-4 mb-6 max-h-[500px] overflow-y-auto">
+            {% for message in conversation.messages %}
+                {% include 'components/message.html' %}
+            {% endfor %}
+        </div>
+
+        <!-- Chat Input Form (only if not concluded) -->
+        {% if not should_conclude and conversation.status == 'active' %}
+        <div id="chat-input-container">
+            <form
+                hx-post="/conversations/{{ conversation.conversation_id }}/messages"
+                hx-target="#message-list"
+                hx-swap="beforeend"
+                hx-on::after-request="this.reset(); this.querySelector('input').focus()"
+                class="flex gap-3">
+
+                <input
+                    type="text"
+                    name="content"
+                    placeholder="Type your response..."
+                    required
+                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    autocomplete="off"
+                />
+
+                <button
+                    type="submit"
+                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                    Send
+                </button>
+            </form>
+
+            <p class="text-xs text-gray-500 mt-2">
+                Press Enter to send • {{ conversation.metadata.total_turns }} turns used
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Conclude / Generate Feedback Button -->
+        {% if should_conclude or conversation.status == 'active' %}
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <p class="text-sm text-gray-600">Ready to generate feedback?</p>
+                    <p class="text-xs text-gray-500 mt-1">The AI will create structured feedback for the clerkship director and student.</p>
+                </div>
+
+                <a
+                    href="/conversations/{{ conversation.conversation_id }}/feedback"
+                    class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium inline-block">
+                    📝 Generate Feedback
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Back to Dashboard -->
+    <div class="text-center">
+        <a href="/dashboard" class="text-blue-600 hover:text-blue-700">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Auto-scroll to latest message -->
+<script>
+    // Scroll to bottom on page load
+    const messageList = document.getElementById('message-list');
+    if (messageList) {
+        messageList.scrollTop = messageList.scrollHeight;
+    }
+
+    // Listen for new messages and scroll
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'message-list') {
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+    });
+
+    // Handle premature feedback warning
+    document.body.addEventListener('prematureFeedback', function() {
+        // Could show a modal or toast here
+        console.log('Premature feedback detected');
+    });
+</script>
+{% endblock %}
