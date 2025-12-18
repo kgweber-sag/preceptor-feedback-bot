@@ -1,0 +1,49 @@
+{# Feedback content component - used for initial display and HTMX updates #}
+
+<div class="prose prose-sm max-w-none">
+    <div class="bg-gray-50 rounded-lg p-4 mb-4">
+        <p class="text-xs text-gray-500 mb-2">
+            <strong>Version {{ feedback.current_version }}</strong>
+            {% if feedback.current_version > 1 %}
+                (Refined {{ feedback.current_version - 1 }} time{{ 's' if feedback.current_version > 2 else '' }})
+            {% else %}
+                (Initial feedback)
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="feedback-content whitespace-pre-wrap text-gray-800 leading-relaxed">
+        {{ current_content }}
+    </div>
+</div>
+
+<style>
+    /* Style the feedback content for better readability */
+    .feedback-content {
+        font-size: 0.95rem;
+        line-height: 1.7;
+    }
+
+    /* Make markdown-style headers stand out */
+    .feedback-content strong {
+        color: #1f2937;
+        font-size: 1.1em;
+        display: block;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+    }
+
+    .feedback-content strong:first-child {
+        margin-top: 0;
+    }
+
+    /* Bullet points */
+    .feedback-content ul {
+        margin: 0.5em 0 1em 1.5em;
+        list-style-type: disc;
+    }
+
+    .feedback-content li {
+        margin: 0.3em 0;
+    }
+</style>

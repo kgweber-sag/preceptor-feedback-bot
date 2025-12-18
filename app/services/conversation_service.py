@@ -227,3 +227,109 @@ class ConversationService:
                 return True
 
         return False
+
+    async def generate_feedback(self, conversation_id: str) -> 'Feedback':
+        """
+        Generate feedback for a conversation.
+
+        Args:
+            conversation_id: Conversation document ID
+
+        Returns:
+            Feedback object with initial version
+        """
+        from app.models.feedback import Feedback, FeedbackVersion, FeedbackVersionType
+
+        # Get conversation
+        conversation = await self.firestore.get_conversation(conversation_id)
+        if not conversation:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        # Check if feedback already exists
+        existing_feedback = await self.firestore.get_feedback_by_conversation(conversation_id)
+        if existing_feedback:
+            return existing_feedback
+
+        # Initialize AI client and restore conversation
+        ai_client = VertexAIClient(conversation_id=conversation_id)
+        ai_client.set_student_name(conversation.student_name)
+
+        # Convert Firestore messages to dict format for restoration
+        conversation_history = [
+            {
+                "timestamp": msg.timestamp.isoformat(),
+                "turn": msg.turn,
+                "role": msg.role.value,
+                "content": msg.content,
+                "response_time_ms": msg.response_time_ms,
+            }
+            for msg in conversation.messages
+        ]
+
+        # Restore conversation context
+        ai_client.restore_conversation(conversation_history)
+
+        # Generate feedback
+        feedback_content = ai_client.generate_feedback()
+
+        # Create feedback object
+        feedback = await self.firestore.create_feedback(
+            conversation_id=conversation_id,
+            user_id=conversation.user_id,
+            student_name=conversation.student_name,
+            feedback_content=feedback_content,
+        )
+
+        return feedback
+
+    async def refine_feedback(self, conversation_id: str, refinement_request: str) -> 'Feedback':
+        """
+        Refine existing feedback based on user request.
+
+        Args:
+            conversation_id: Conversation document ID
+            refinement_request: User's refinement request
+
+        Returns:
+            Updated Feedback object with new version
+        """
+        # Get conversation
+        conversation = await self.firestore.get_conversation(conversation_id)
+        if not conversation:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        # Get existing feedback
+        feedback = await self.firestore.get_feedback_by_conversation(conversation_id)
+        if not feedback:
+            raise ValueError(f"No feedback found for conversation {conversation_id}")
+
+        # Initialize AI client and restore conversation
+        ai_client = VertexAIClient(conversation_id=conversation_id)
+        ai_client.set_student_name(conversation.student_name)
+
+        # Convert Firestore messages to dict format for restoration
+        conversation_history = [
+            {
+                "timestamp": msg.timestamp.isoformat(),
+                "turn": msg.turn,
+                "role": msg.role.value,
+                "content": msg.content,
+                "response_time_ms": msg.response_time_ms,
+            }
+            for msg in conversation.messages
+        ]
+
+        # Restore conversation context
+        ai_client.restore_conversation(conversation_history)
+
+        # Refine feedback
+        refined_content = ai_client.refine_feedback(refinement_request)
+
+        # Add refinement version to feedback
+        updated_feedback = await self.firestore.add_feedback_refinement(
+            feedback_id=feedback.feedback_id,
+            refined_content=refined_content,
+            refinement_request=refinement_request,
+        )
+
+        return updated_feedback

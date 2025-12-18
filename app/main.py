@@ -12,10 +12,10 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.middleware.auth_middleware import AuthMiddleware
-from app.api import auth, conversations
+from app.api import auth, conversations, feedback
 
 # Import API routers (to be created)
-# from app.api import feedback, user
+# from app.api import user
 
 
 @asynccontextmanager
@@ -69,8 +69,8 @@ templates.env.filters["timeago"] = lambda dt: "just now"  # Placeholder for time
 # Include API routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
 app.include_router(conversations.router, prefix="/conversations", tags=["conversations"])
+app.include_router(feedback.router, tags=["feedback"])
 # To be implemented:
-# app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
 # app.include_router(user.router, tags=["user"])
 
 
