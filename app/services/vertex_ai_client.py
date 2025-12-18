@@ -312,12 +312,12 @@ Please format clearly with headers."""
 
         try:
             # Create explicit refinement prompt
-            # Make it VERY clear we're refining already-generated feedback
-            refinement_prompt = f"""You already generated feedback in your previous response. Now please refine that feedback based on this request:
+            # Direct and concise - no apologies or explanations needed
+            refinement_prompt = f"""Based on the feedback you just generated, apply this refinement and regenerate BOTH outputs:
 
-"{refinement_request}"
+{refinement_request}
 
-Please regenerate BOTH outputs (Clerkship Director Summary and Student-Facing Narrative) incorporating the requested changes. Format them exactly as before with clear headers."""
+Provide the updated Clerkship Director Summary and Student-Facing Narrative with the same formatting as before. No explanation needed - just the refined feedback."""
 
             # Log the user's refinement request
             self.conversation_history.append(
