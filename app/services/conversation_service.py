@@ -277,7 +277,7 @@ class ConversationService:
             conversation_id=conversation_id,
             user_id=conversation.user_id,
             student_name=conversation.student_name,
-            feedback_content=feedback_content,
+            initial_content=feedback_content,
         )
 
         return feedback
@@ -328,7 +328,7 @@ class ConversationService:
         # Add refinement version to feedback
         updated_feedback = await self.firestore.add_feedback_refinement(
             feedback_id=feedback.feedback_id,
-            refined_content=refined_content,
+            refinement_content=refined_content,
             refinement_request=refinement_request,
         )
 

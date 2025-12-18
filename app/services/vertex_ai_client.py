@@ -139,9 +139,13 @@ class VertexAIClient:
             if response is None or not response.text:
                 raise ValueError("No response received from model")
 
-            # Log the exchange
+            # Log the exchange (initial greeting counts as turn 0)
             self._log_turn("system", initial_prompt)
             self._log_turn("assistant", response.text)
+
+            # Don't increment turn count for initial greeting
+            # First user message will be turn 1
+            # (Turn count stays at 0 for the initial greeting)
 
             return response.text
 

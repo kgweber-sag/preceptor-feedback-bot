@@ -12,7 +12,7 @@
                 <p class="text-gray-600 mt-1">Student: <span class="font-medium">{{ conversation.student_name }}</span></p>
             </div>
             <div class="text-right">
-                <p class="text-sm text-gray-500">Turn {{ max_turns }} / {{ conversation.metadata.total_turns }}</p>
+                <p id="turn-counter" class="text-sm text-gray-500">Turn {{ conversation.metadata.total_turns }}</p>
                 <p class="text-xs text-gray-400 mt-1">{{ conversation.metadata.model }}</p>
             </div>
         </div>

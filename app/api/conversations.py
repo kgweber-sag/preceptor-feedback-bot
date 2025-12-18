@@ -77,7 +77,6 @@ async def get_conversation(
                 "user": current_user,
                 "conversation": conversation,
                 "should_conclude": should_conclude,
-                "max_turns": conversation.metadata.total_turns,
             },
         )
 
@@ -134,6 +133,9 @@ async def send_message(
                 headers={"HX-Trigger": "prematureFeedback"},
             )
 
+        # Get updated conversation for turn count
+        updated_conversation = await firestore.get_conversation(conversation_id)
+
         # Return user message + AI response as HTML fragments
         user_message_html = templates.get_template("components/message.html").render(
             message={"role": "user", "content": message_data.content}
@@ -143,7 +145,10 @@ async def send_message(
             message={"role": "assistant", "content": ai_response.content}
         )
 
-        return HTMLResponse(content=user_message_html + ai_message_html)
+        # Update turn counter using out-of-band swap
+        turn_counter_html = f'<p id="turn-counter" class="text-sm text-gray-500" hx-swap-oob="true">Turn {updated_conversation.metadata.total_turns}</p>'
+
+        return HTMLResponse(content=user_message_html + ai_message_html + turn_counter_html)
 
     except HTTPException:
         raise
