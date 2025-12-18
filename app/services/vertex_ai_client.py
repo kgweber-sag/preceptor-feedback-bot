@@ -311,19 +311,27 @@ Please format clearly with headers."""
             raise ValueError("No active conversation")
 
         try:
+            # Create explicit refinement prompt
+            # Make it VERY clear we're refining already-generated feedback
+            refinement_prompt = f"""You already generated feedback in your previous response. Now please refine that feedback based on this request:
+
+"{refinement_request}"
+
+Please regenerate BOTH outputs (Clerkship Director Summary and Student-Facing Narrative) incorporating the requested changes. Format them exactly as before with clear headers."""
+
             # Log the user's refinement request
             self.conversation_history.append(
                 {
                     "timestamp": datetime.utcnow().isoformat(),
                     "turn": "feedback_refinement",
                     "role": "user",
-                    "content": refinement_request,
+                    "content": refinement_prompt,
                 }
             )
 
             start_time = time.time()
             response = self._call_with_backoff(
-                self.chat.send_message, refinement_request
+                self.chat.send_message, refinement_prompt
             )
             response_time_ms = (time.time() - start_time) * 1000
 
