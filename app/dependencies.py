@@ -13,17 +13,29 @@ from app.services.firestore_service import FirestoreService
 def get_current_user(request: Request) -> dict:
     """
     Dependency: Get current authenticated user from request state.
-    Raises 401 if not authenticated.
+    Raises 401 if not authenticated (unless OAuth is disabled for testing).
 
     Args:
         request: FastAPI request with auth middleware applied
 
     Returns:
-        dict: User info from JWT
+        dict: User info from JWT or mock user if OAuth disabled
 
     Raises:
         HTTPException: 401 if not authenticated
     """
+    from app.config import settings
+
+    # If OAuth is completely disabled, use a mock user for testing
+    if not settings.OAUTH_CLIENT_ID or not settings.OAUTH_DOMAIN_RESTRICTION:
+        # Return a mock user for testing when OAuth is disabled
+        return {
+            "user_id": "test-user-001",
+            "email": "test@example.com",
+            "name": "Test User (OAuth Disabled)",
+            "domain": "example.com",
+        }
+
     if not request.state.authenticated or not request.state.user:
         raise HTTPException(
             status_code=401,

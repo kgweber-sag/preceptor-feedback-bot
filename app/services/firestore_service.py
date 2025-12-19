@@ -236,24 +236,41 @@ class FirestoreService:
         # Base query: user's conversations
         query = conversations_ref.where(filter=FieldFilter("user_id", "==", user_id))
 
-        # Optional status filter
-        if status:
-            query = query.where(filter=FieldFilter("status", "==", status.value))
+        # WORKAROUND: Don't add status filter in Firestore query (requires composite index)
+        # Instead, filter in memory after fetching
+        # TODO: Once composite index is created, uncomment this for better performance:
+        # if status:
+        #     query = query.where(filter=FieldFilter("status", "==", status.value))
 
         # Order by updated_at descending
         query = query.order_by("updated_at", direction=firestore.Query.DESCENDING)
 
-        # Pagination
-        query = query.offset(offset).limit(limit)
-
-        # Execute query
-        docs = list(query.stream())
+        # Execute query (fetch more if filtering by status, to account for filtering)
+        if status:
+            # Fetch extra to account for in-memory filtering
+            docs = list(query.stream())
+        else:
+            # Normal pagination when no status filter
+            query = query.offset(offset).limit(limit)
+            docs = list(query.stream())
 
         summaries = []
         for doc in docs:
             data = doc.to_dict()
+
+            # Filter by status in memory if specified
+            if status and data.get("status") != status.value:
+                continue
+
             messages = data.get("messages", [])
             last_message = messages[-1]["content"] if messages else ""
+
+            # Read has_feedback directly from conversation document (no extra query!)
+            has_feedback = data.get("has_feedback", False)
+
+            # For feedback preview, we'd need to query feedback collection
+            # Skip for now to avoid N+1 queries - we can add back later if needed
+            feedback_preview = None
 
             summary = ConversationSummary(
                 conversation_id=doc.id,
@@ -263,6 +280,88 @@ class FirestoreService:
                 last_message_preview=last_message[:100] if last_message else None,
                 created_at=data["created_at"],
                 updated_at=data["updated_at"],
+                has_feedback=has_feedback,
+                feedback_preview=feedback_preview,
+            )
+            summaries.append(summary)
+
+        # Apply pagination after filtering
+        if status:
+            summaries = summaries[offset:offset + limit]
+
+        return summaries
+
+    async def search_conversations(
+        self,
+        user_id: str,
+        query: str,
+        status: Optional[ConversationStatus] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[ConversationSummary]:
+        """
+        Search conversations by student name (case-insensitive).
+
+        Args:
+            user_id: User document ID
+            query: Search query for student name
+            status: Optional status filter
+            limit: Max conversations to return
+            offset: Pagination offset
+
+        Returns:
+            List of ConversationSummary objects matching search
+        """
+        conversations_ref = self.db.collection(settings.CONVERSATIONS_COLLECTION)
+
+        # Base query: user's conversations
+        base_query = conversations_ref.where(filter=FieldFilter("user_id", "==", user_id))
+
+        # Optional status filter
+        if status:
+            base_query = base_query.where(filter=FieldFilter("status", "==", status.value))
+
+        # Order by updated_at descending
+        base_query = base_query.order_by("updated_at", direction=firestore.Query.DESCENDING)
+
+        # Execute query to get all user's conversations
+        # Note: Firestore doesn't support case-insensitive text search natively,
+        # so we filter in memory. For production, consider Algolia or similar.
+        docs = list(base_query.stream())
+
+        # Filter by student name (case-insensitive)
+        query_lower = query.lower()
+        matching_docs = [
+            doc for doc in docs
+            if query_lower in doc.to_dict().get("student_name", "").lower()
+        ]
+
+        # Apply pagination to filtered results
+        paginated_docs = matching_docs[offset:offset + limit]
+
+        summaries = []
+        for doc in paginated_docs:
+            data = doc.to_dict()
+            messages = data.get("messages", [])
+            last_message = messages[-1]["content"] if messages else ""
+
+            # Read has_feedback directly from conversation document (no extra query!)
+            has_feedback = data.get("has_feedback", False)
+
+            # For feedback preview, we'd need to query feedback collection
+            # Skip for now to avoid N+1 queries - we can add back later if needed
+            feedback_preview = None
+
+            summary = ConversationSummary(
+                conversation_id=doc.id,
+                student_name=data["student_name"],
+                status=ConversationStatus(data["status"]),
+                total_turns=data["metadata"]["total_turns"],
+                last_message_preview=last_message[:100] if last_message else None,
+                created_at=data["created_at"],
+                updated_at=data["updated_at"],
+                has_feedback=has_feedback,
+                feedback_preview=feedback_preview,
             )
             summaries.append(summary)
 
@@ -311,6 +410,15 @@ class FirestoreService:
 
         doc_ref = feedback_ref.add(feedback_dict)[1]
         feedback_dict["feedback_id"] = doc_ref.id
+
+        # Update conversation to mark that it has feedback
+        conv_ref = self.db.collection(settings.CONVERSATIONS_COLLECTION).document(
+            conversation_id
+        )
+        conv_ref.update({
+            "has_feedback": True,
+            "updated_at": datetime.utcnow(),
+        })
 
         return Feedback(**feedback_dict)
 

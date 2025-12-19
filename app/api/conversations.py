@@ -74,6 +74,9 @@ async def get_conversation(
         conv_service = ConversationService(firestore)
         should_conclude = await conv_service.check_should_conclude(conversation_id)
 
+        # Get feedback if it exists
+        feedback = await firestore.get_feedback_by_conversation(conversation_id)
+
         return templates.TemplateResponse(
             "conversation.html",
             {
@@ -81,6 +84,8 @@ async def get_conversation(
                 "user": current_user,
                 "conversation": conversation,
                 "should_conclude": should_conclude,
+                "feedback": feedback,
+                "current_content": feedback.get_current_content() if feedback else None,
             },
         )
 

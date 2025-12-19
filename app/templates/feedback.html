@@ -4,6 +4,16 @@
 
 {% block content %}
 <div class="max-w-5xl mx-auto">
+    <!-- Back button -->
+    <div class="mb-4">
+        <a href="/conversations/{{ conversation.conversation_id }}" class="inline-flex items-center text-blue-600 hover:text-blue-700">
+            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Back to Conversation
+        </a>
+    </div>
+
     <!-- Header -->
     <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
         <div class="flex justify-between items-center">

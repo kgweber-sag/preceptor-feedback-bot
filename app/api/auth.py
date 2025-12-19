@@ -43,6 +43,7 @@ async def login(request: Request):
         httponly=True,
         secure=not settings.DEBUG,
         samesite="lax",
+        path="/",  # Ensure cookie is sent to all paths
     )
 
     response.set_cookie(
@@ -52,6 +53,7 @@ async def login(request: Request):
         httponly=True,
         secure=not settings.DEBUG,
         samesite="lax",
+        path="/",  # Ensure cookie is sent to all paths
     )
 
     return response
@@ -138,11 +140,12 @@ async def oauth_callback(
             httponly=True,
             secure=not settings.DEBUG,
             samesite="lax",
+            path="/",
         )
 
         # Clear temporary OAuth cookies
-        response.delete_cookie("oauth_code_verifier")
-        response.delete_cookie("oauth_state")
+        response.delete_cookie("oauth_code_verifier", path="/")
+        response.delete_cookie("oauth_state", path="/")
 
         return response
 
@@ -167,7 +170,7 @@ async def logout(response: Response):
     Log out user by clearing JWT cookie.
     """
     response = RedirectResponse(url="/", status_code=302)
-    response.delete_cookie(settings.SESSION_COOKIE_NAME)
+    response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
     return response
 
 

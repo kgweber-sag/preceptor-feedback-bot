@@ -119,9 +119,17 @@ Session state in `app.py` tracks:
 
 ### Credentials Handling
 
-**Local:** Set `GCP_CREDENTIALS_PATH` in `.env` to point to service account JSON. The app sets `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
+**GCP Service Account:**
+- **Local:** Set `GCP_CREDENTIALS_PATH` in `.env` to point to service account JSON. The app sets `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
+- **Cloud:** Set `DEPLOYMENT_ENV=cloud`. No credentials path needed - uses Application Default Credentials automatically.
 
-**Cloud:** Set `DEPLOYMENT_ENV=cloud`. No credentials path needed - uses Application Default Credentials automatically.
+**Application Secrets (OAuth, JWT):**
+- **Local:** Set in `.env` file (see `.env.example` for template)
+- **Cloud:** Managed via Google Cloud Secret Manager
+  - Run `./setup_secrets.sh` to configure secrets (one-time setup)
+  - Secrets automatically injected as environment variables by Cloud Run
+  - No manual configuration needed after initial setup
+  - See `DEPLOYMENT.md` for details
 
 ## Common Modification Patterns
 
@@ -228,6 +236,8 @@ MODEL_NAME=gemini-2.5-flash # NOT "gemini-2.0-flash-exp"
 
 **Cloud (`DEPLOYMENT_ENV=cloud`):**
 - Environment variables set in Cloud Run
+- Secrets managed via Google Cloud Secret Manager (OAuth, JWT)
 - Uses Application Default Credentials (no JSON key)
 - Logs to Cloud Storage bucket specified by `LOG_BUCKET`
 - `CLOUD_RUN_TIMEOUT` controls session timeout (default 600s / 10 min)
+- Run `./setup_secrets.sh` before first deployment

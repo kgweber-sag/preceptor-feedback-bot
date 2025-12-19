@@ -68,6 +68,7 @@ class Conversation(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: ConversationMetadata
     messages: List[Message] = Field(default_factory=list)
+    has_feedback: bool = Field(default=False, description="Whether feedback has been generated")
 
     class Config:
         json_schema_extra = {
@@ -105,6 +106,8 @@ class ConversationSummary(BaseModel):
     last_message_preview: Optional[str] = Field(None, description="Preview of last message")
     created_at: datetime
     updated_at: datetime
+    has_feedback: bool = Field(default=False, description="Whether feedback has been generated")
+    feedback_preview: Optional[str] = Field(None, description="Short preview of feedback content")
 
 
 class MessageCreate(BaseModel):
